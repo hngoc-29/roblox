@@ -5,7 +5,7 @@ local CoreGui = game:GetService("CoreGui")
 local StarterGui = game:GetService("StarterGui")
 
 -- --- CẤU HÌNH ---
-local FPS_THRESHOLD = 10
+local FPS_THRESHOLD = 5
 local CHECK_INTERVAL = 1 -- Kiểm tra mỗi giây để chính xác hơn
 local FPS_LOW_DURATION = 8 -- Thời gian FPS phải thấp liên tục (8 giây)
 local GRACE_PERIOD = 60 
