@@ -519,6 +519,7 @@ local function fetchValidServers(isLowPlayer)
             .. game.PlaceId
             .. "/servers/Public?limit=100&"
         if isLowPlayer then url = url .. "sortOrder=Asc"
+        else url = url .. "sortOrder=Desc&excludeFullGames=true"
         end
         print(url)
         return HttpService:JSONDecode(game:HttpGet(url))
@@ -737,7 +738,7 @@ task.spawn(function()
                 lowFpsTimer = 0
                 isHopping   = true
                 task.spawn(function()
-                    local servers = fetchValidServers(true)
+                    local servers = fetchValidServers(false)
                     if servers and #servers > 0 then
                         local chosen = servers[math.random(1, #servers)].id
                         pcall(teleportByJobId, chosen)
