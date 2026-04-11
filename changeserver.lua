@@ -737,7 +737,7 @@ task.spawn(function()
                 lowFpsTimer = 0
                 isHopping   = true
                 task.spawn(function()
-                    local servers = fetchValidServers(false)
+                    local servers = fetchValidServers(true)
                     if servers and #servers > 0 then
                         local chosen = servers[math.random(1, #servers)].id
                         pcall(teleportByJobId, chosen)
