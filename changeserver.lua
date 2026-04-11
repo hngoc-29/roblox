@@ -1,10 +1,10 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
-local HttpService = game:GetService("HttpService")
-local CoreGui = game:GetService("CoreGui")
-local StarterGui = game:GetService("StarterGui")
-local UserInputService = game:GetService("UserInputService")
-local TeleportService = game:GetService("TeleportService")
+local RunService        = game:GetService("RunService")
+local HttpService       = game:GetService("HttpService")
+local CoreGui           = game:GetService("CoreGui")
+local StarterGui        = game:GetService("StarterGui")
+local UserInputService  = game:GetService("UserInputService")
+local TeleportService   = game:GetService("TeleportService")
 
 -- ============================================================
 -- CONFIG
@@ -12,11 +12,13 @@ local TeleportService = game:GetService("TeleportService")
 local CONFIG_FILE = "ServerTools_Config.json"
 
 local DEFAULT_CONFIG = {
-    autoHopEnabled  = true,
-    fpsThreshold    = 5,
-    fpsDuration     = 8,
-    gracePeriod     = 60,
-    teleportDelay   = 5,
+    autoHopEnabled = true,
+    fpsThreshold   = 5,
+    fpsDuration    = 8,
+    gracePeriod    = 60,
+    teleportDelay  = 5,
+    spamMaxHops    = 5,
+    spamHopDelay   = 3,
 }
 
 local config = {}
@@ -43,7 +45,14 @@ end
 loadConfig()
 
 -- ============================================================
--- TELEPORT (ưu tiên __ServerBrowser, fallback TeleportService)
+-- GET JOB_ID
+-- ============================================================
+local function getJobId()
+    return game.JobId
+end
+
+-- ============================================================
+-- TELEPORT
 -- ============================================================
 local function teleportByJobId(jobId)
     local sb = ReplicatedStorage:FindFirstChild("__ServerBrowser")
@@ -52,21 +61,20 @@ local function teleportByJobId(jobId)
             sb:InvokeServer("teleport", jobId)
         end)
         if ok then return true end
-        warn("[ServerTools] __ServerBrowser thất bại:", err)
+        warn("[ServerTools] __ServerBrowser that bai:", err)
     end
-    
     local ok2, err2 = pcall(function()
         TeleportService:TeleportToPlaceInstance(game.PlaceId, jobId)
     end)
     if not ok2 then
-        warn("[ServerTools] TeleportService thất bại:", err2)
-        return false, err2
+        warn("[ServerTools] TeleportService that bai:", err2)
+        return false
     end
     return true
 end
 
 -- ============================================================
--- TRẠNG THÁI
+-- TRANG THAI
 -- ============================================================
 local isHopping       = false
 local cancelHopping   = false
@@ -78,32 +86,32 @@ local menuOpen        = false
 local configOpen      = false
 
 -- ============================================================
--- XÂY DỰNG GUI
+-- XAY DUNG GUI
 -- ============================================================
 if CoreGui:FindFirstChild("ServerTools_GUI") then
     CoreGui:FindFirstChild("ServerTools_GUI"):Destroy()
 end
 
-local screenGui = Instance.new("ScreenGui")
+local screenGui          = Instance.new("ScreenGui")
 screenGui.Name           = "ServerTools_GUI"
 screenGui.ResetOnSpawn   = false
 screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 screenGui.Parent         = CoreGui
 
--- ── Màu palette ──────────────────────────────────────────────
 local C = {
     bg      = Color3.fromRGB(13, 13, 22),
     panel   = Color3.fromRGB(20, 20, 35),
     accent  = Color3.fromRGB(0, 180, 255),
     green   = Color3.fromRGB(0, 200, 100),
     red     = Color3.fromRGB(210, 50, 50),
+    orange  = Color3.fromRGB(200, 120, 0),
+    purple  = Color3.fromRGB(130, 60, 210),
     text    = Color3.new(1, 1, 1),
     subtext = Color3.fromRGB(150, 150, 180),
     input   = Color3.fromRGB(28, 28, 46),
     btnDark = Color3.fromRGB(30, 30, 52),
 }
 
--- ── Helper tạo UICorner & UIStroke ───────────────────────────
 local function corner(parent, r)
     local c = Instance.new("UICorner")
     c.CornerRadius = UDim.new(0, r or 8)
@@ -113,27 +121,27 @@ end
 
 local function stroke(parent, color, thick)
     local s = Instance.new("UIStroke")
-    s.Color = color or C.accent
-    s.Thickness = thick or 1
+    s.Color        = color or C.accent
+    s.Thickness    = thick or 1
     s.Transparency = 0.5
-    s.Parent = parent
+    s.Parent       = parent
     return s
 end
 
--- ── Nút toggle nhỏ (luôn thấy) ───────────────────────────────
-local toggleBtn = Instance.new("TextButton")
+-- nut toggle
+local toggleBtn            = Instance.new("TextButton")
 toggleBtn.Size             = UDim2.new(0, 120, 0, 30)
 toggleBtn.Position         = UDim2.new(0, 10, 0, 10)
 toggleBtn.BackgroundColor3 = C.bg
 toggleBtn.TextColor3       = C.accent
 toggleBtn.TextSize         = 13
 toggleBtn.Font             = Enum.Font.GothamBold
-toggleBtn.Text             = "☰  Server Tools"
+toggleBtn.Text             = "Server Tools"
 toggleBtn.BorderSizePixel  = 0
 toggleBtn.Parent           = screenGui
-corner(toggleBtn, 8) ; stroke(toggleBtn, C.accent, 1)
+corner(toggleBtn, 8); stroke(toggleBtn, C.accent, 1)
 
-local fpsDisplay = Instance.new("TextLabel")
+local fpsDisplay                  = Instance.new("TextLabel")
 fpsDisplay.Size                   = UDim2.new(0, 120, 0, 22)
 fpsDisplay.Position               = UDim2.new(0, 10, 0, 44)
 fpsDisplay.BackgroundColor3       = C.bg
@@ -147,9 +155,9 @@ fpsDisplay.Parent                 = screenGui
 corner(fpsDisplay, 6)
 
 -- ============================================================
--- MENU CHÍNH
+-- MENU CHINH
 -- ============================================================
-local menuFrame = Instance.new("Frame")
+local menuFrame            = Instance.new("Frame")
 menuFrame.Name             = "Menu"
 menuFrame.Size             = UDim2.new(0, 270, 0, 0)
 menuFrame.Position         = UDim2.new(0, 10, 0, 72)
@@ -158,34 +166,34 @@ menuFrame.BorderSizePixel  = 0
 menuFrame.Visible          = false
 menuFrame.ClipsDescendants = true
 menuFrame.Parent           = screenGui
-corner(menuFrame, 10) ; stroke(menuFrame, C.accent, 1.2)
+corner(menuFrame, 10); stroke(menuFrame, C.accent, 1.2)
 
-local titleBar = Instance.new("Frame")
+local titleBar            = Instance.new("Frame")
 titleBar.Size             = UDim2.new(1, 0, 0, 34)
 titleBar.BackgroundColor3 = C.accent
 titleBar.BorderSizePixel  = 0
 titleBar.Parent           = menuFrame
 corner(titleBar, 10)
 
-local titleFix = Instance.new("Frame")
+local titleFix            = Instance.new("Frame")
 titleFix.Size             = UDim2.new(1, 0, 0, 10)
 titleFix.Position         = UDim2.new(0, 0, 1, -10)
 titleFix.BackgroundColor3 = C.accent
 titleFix.BorderSizePixel  = 0
 titleFix.Parent           = titleBar
 
-local titleLbl = Instance.new("TextLabel")
+local titleLbl                  = Instance.new("TextLabel")
 titleLbl.Size                   = UDim2.new(1, -10, 1, 0)
 titleLbl.Position               = UDim2.new(0, 10, 0, 0)
 titleLbl.BackgroundTransparency = 1
 titleLbl.TextColor3             = C.text
 titleLbl.TextSize               = 13
 titleLbl.Font                   = Enum.Font.GothamBold
-titleLbl.Text                   = "⚙  Server Tools"
+titleLbl.Text                   = "Server Tools"
 titleLbl.TextXAlignment         = Enum.TextXAlignment.Left
 titleLbl.Parent                 = titleBar
 
-local scrollFrame = Instance.new("ScrollingFrame")
+local scrollFrame                  = Instance.new("ScrollingFrame")
 scrollFrame.Size                   = UDim2.new(1, 0, 1, -34)
 scrollFrame.Position               = UDim2.new(0, 0, 0, 34)
 scrollFrame.BackgroundTransparency = 1
@@ -196,12 +204,12 @@ scrollFrame.CanvasSize             = UDim2.new(0, 0, 0, 0)
 scrollFrame.AutomaticCanvasSize    = Enum.AutomaticSize.Y
 scrollFrame.Parent                 = menuFrame
 
-local listLayout = Instance.new("UIListLayout")
+local listLayout               = Instance.new("UIListLayout")
 listLayout.Padding             = UDim.new(0, 6)
 listLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 listLayout.Parent              = scrollFrame
 
-local listPad = Instance.new("UIPadding")
+local listPad         = Instance.new("UIPadding")
 listPad.PaddingTop    = UDim.new(0, 8)
 listPad.PaddingBottom = UDim.new(0, 8)
 listPad.PaddingLeft   = UDim.new(0, 10)
@@ -209,7 +217,7 @@ listPad.PaddingRight  = UDim.new(0, 10)
 listPad.Parent        = scrollFrame
 
 local function makeBtn(text, bgColor)
-    local b = Instance.new("TextButton")
+    local b            = Instance.new("TextButton")
     b.Size             = UDim2.new(1, 0, 0, 34)
     b.BackgroundColor3 = bgColor or C.btnDark
     b.TextColor3       = C.text
@@ -223,7 +231,7 @@ local function makeBtn(text, bgColor)
 end
 
 local function makeLabel(text)
-    local l = Instance.new("TextLabel")
+    local l                  = Instance.new("TextLabel")
     l.Size                   = UDim2.new(1, 0, 0, 18)
     l.BackgroundTransparency = 1
     l.TextColor3             = C.subtext
@@ -236,7 +244,7 @@ local function makeLabel(text)
 end
 
 local function makeTextBox(placeholder)
-    local b = Instance.new("TextBox")
+    local b             = Instance.new("TextBox")
     b.Size              = UDim2.new(1, 0, 0, 30)
     b.BackgroundColor3  = C.input
     b.TextColor3        = C.text
@@ -247,41 +255,47 @@ local function makeTextBox(placeholder)
     b.ClearTextOnFocus  = false
     b.BorderSizePixel   = 0
     b.Parent            = scrollFrame
-    corner(b, 6) ; stroke(b, C.accent, 1)
+    corner(b, 6); stroke(b, C.accent, 1)
     return b
 end
 
-makeLabel("Job ID để join trực tiếp:")
-local jobIdBox   = makeTextBox("Paste Job ID vào đây...")
-local joinJobBtn = makeBtn("  ▶  Join theo Job ID", C.accent)
+local function makeSep()
+    local s            = Instance.new("Frame")
+    s.Size             = UDim2.new(1, 0, 0, 1)
+    s.BackgroundColor3 = Color3.fromRGB(50, 50, 80)
+    s.BorderSizePixel  = 0
+    s.Parent           = scrollFrame
+    return s
+end
 
-local sep1 = Instance.new("Frame")
-sep1.Size             = UDim2.new(1, 0, 0, 1)
-sep1.BackgroundColor3 = Color3.fromRGB(50, 50, 80)
-sep1.BorderSizePixel  = 0
-sep1.Parent           = scrollFrame
+-- nut menu
+makeLabel("Job ID: " .. getJobId())
+local jobIdBox   = makeTextBox("Paste Job ID vao day...")
+local joinJobBtn = makeBtn("  Join theo Job ID", C.accent)
+local copyJobBtn = makeBtn("  Copy Job ID",      C.accent)
 
-local hopBtn = makeBtn("  🔄  Đổi Server Ngẫu Nhiên", C.btnDark)
+makeSep()
+
+local SPAM_ORIG_TEXT     = "  Spam Hop Ngau Nhien"
+local SPAM_LOW_ORIG_TEXT = "  Spam Hop It Player"
+
+local spamHopBtn = makeBtn(SPAM_ORIG_TEXT,     C.btnDark)
+local spamLowBtn = makeBtn(SPAM_LOW_ORIG_TEXT, C.purple)
 
 local autoHopBtn = makeBtn("", C.green)
 local function refreshAutoBtn()
     if config.autoHopEnabled then
         autoHopBtn.BackgroundColor3 = C.green
-        autoHopBtn.Text = "  ✅  Auto FPS Hop: BẬT"
+        autoHopBtn.Text             = "  Auto FPS Hop: BAT"
     else
         autoHopBtn.BackgroundColor3 = C.red
-        autoHopBtn.Text = "  ❌  Auto FPS Hop: TẮT"
+        autoHopBtn.Text             = "  Auto FPS Hop: TAT"
     end
 end
 refreshAutoBtn()
 
-local sep2 = Instance.new("Frame")
-sep2.Size             = UDim2.new(1, 0, 0, 1)
-sep2.BackgroundColor3 = Color3.fromRGB(50, 50, 80)
-sep2.BorderSizePixel  = 0
-sep2.Parent           = scrollFrame
-
-local openCfgBtn = makeBtn("  ⚙  Chỉnh Config...", C.btnDark)
+makeSep()
+local openCfgBtn = makeBtn("  Chinh Config...", C.btnDark)
 
 local function resizeMenu()
     local h = listLayout.AbsoluteContentSize.Y + 34 + 16
@@ -292,7 +306,7 @@ listLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(resizeMenu)
 -- ============================================================
 -- PANEL CONFIG
 -- ============================================================
-local cfgPanel = Instance.new("Frame")
+local cfgPanel            = Instance.new("Frame")
 cfgPanel.Name             = "ConfigPanel"
 cfgPanel.Size             = UDim2.new(1, 0, 1, -34)
 cfgPanel.Position         = UDim2.new(0, 0, 0, 34)
@@ -303,7 +317,7 @@ cfgPanel.ClipsDescendants = true
 cfgPanel.ZIndex           = 10
 cfgPanel.Parent           = menuFrame
 
-local cfgScroll = Instance.new("ScrollingFrame")
+local cfgScroll                  = Instance.new("ScrollingFrame")
 cfgScroll.Size                   = UDim2.new(1, 0, 1, 0)
 cfgScroll.BackgroundTransparency = 1
 cfgScroll.BorderSizePixel        = 0
@@ -313,12 +327,12 @@ cfgScroll.CanvasSize             = UDim2.new(0, 0, 0, 0)
 cfgScroll.AutomaticCanvasSize    = Enum.AutomaticSize.Y
 cfgScroll.Parent                 = cfgPanel
 
-local cfgList = Instance.new("UIListLayout")
-cfgList.Padding             = UDim.new(0, 10)
-cfgList.HorizontalAlignment = Enum.HorizontalAlignment.Center
-cfgList.Parent              = cfgScroll
+local cfgList                    = Instance.new("UIListLayout")
+cfgList.Padding                  = UDim.new(0, 10)
+cfgList.HorizontalAlignment      = Enum.HorizontalAlignment.Center
+cfgList.Parent                   = cfgScroll
 
-local cfgPad = Instance.new("UIPadding")
+local cfgPad         = Instance.new("UIPadding")
 cfgPad.PaddingTop    = UDim.new(0, 10)
 cfgPad.PaddingBottom = UDim.new(0, 10)
 cfgPad.PaddingLeft   = UDim.new(0, 10)
@@ -327,14 +341,13 @@ cfgPad.Parent        = cfgScroll
 
 local cfgBoxes = {}
 
--- Cải tiến giao diện Config: Gom Label và TextBox vào chung một cụm
 local function makeCfgRow(label, key)
-    local container = Instance.new("Frame")
-    container.Size = UDim2.new(1, 0, 0, 50)
+    local container                  = Instance.new("Frame")
+    container.Size                   = UDim2.new(1, 0, 0, 50)
     container.BackgroundTransparency = 1
-    container.Parent = cfgScroll
+    container.Parent                 = cfgScroll
 
-    local lbl = Instance.new("TextLabel")
+    local lbl                  = Instance.new("TextLabel")
     lbl.Size                   = UDim2.new(1, 0, 0, 16)
     lbl.Position               = UDim2.new(0, 5, 0, 0)
     lbl.BackgroundTransparency = 1
@@ -346,7 +359,7 @@ local function makeCfgRow(label, key)
     lbl.ZIndex                 = 11
     lbl.Parent                 = container
 
-    local box = Instance.new("TextBox")
+    local box            = Instance.new("TextBox")
     box.Size             = UDim2.new(1, 0, 0, 30)
     box.Position         = UDim2.new(0, 0, 0, 20)
     box.BackgroundColor3 = C.input
@@ -358,14 +371,14 @@ local function makeCfgRow(label, key)
     box.BorderSizePixel  = 0
     box.ZIndex           = 11
     box.Parent           = container
-    corner(box, 6) ; stroke(box, C.accent, 1)
+    corner(box, 6); stroke(box, C.accent, 1)
 
     table.insert(cfgBoxes, { key = key, box = box })
     return box
 end
 
 local function makeCfgBtn(text, bgColor)
-    local b = Instance.new("TextButton")
+    local b            = Instance.new("TextButton")
     b.Size             = UDim2.new(1, 0, 0, 34)
     b.BackgroundColor3 = bgColor or C.btnDark
     b.TextColor3       = C.text
@@ -379,38 +392,40 @@ local function makeCfgBtn(text, bgColor)
     return b
 end
 
-local cfgTitle = Instance.new("TextLabel")
-cfgTitle.Size                   = UDim2.new(1, 0, 0, 22)
+local cfgTitle                  = Instance.new("TextLabel")
+cfgTitle.Size                   = UDim2.new(1, 0, 0, 30)
 cfgTitle.BackgroundTransparency = 1
 cfgTitle.TextColor3             = C.accent
 cfgTitle.TextSize               = 14
 cfgTitle.Font                   = Enum.Font.GothamBold
-cfgTitle.Text                   = "⚙  Chỉnh sửa Config"
+cfgTitle.Text                   = "Chinh sua Config"
 cfgTitle.ZIndex                 = 11
 cfgTitle.Parent                 = cfgScroll
 
-makeCfgRow("Ngưỡng FPS để nhảy Server:", "fpsThreshold")
-makeCfgRow("Thời gian FPS thấp liên tục (s):", "fpsDuration")
-makeCfgRow("Thời gian chờ sau khi load game (s):",  "gracePeriod")
-makeCfgRow("Đếm ngược trước khi Teleport (s):",       "teleportDelay")
+makeCfgRow("Nguong FPS de nhay Server:",           "fpsThreshold")
+makeCfgRow("Thoi gian FPS thap lien tuc (s):",     "fpsDuration")
+makeCfgRow("Thoi gian cho sau khi load game (s):", "gracePeriod")
+makeCfgRow("Dem nguoc truoc khi bat dau Hop (s):", "teleportDelay")
+makeCfgRow("So lan Spam Hop toi da:",              "spamMaxHops")
+makeCfgRow("Delay giua moi lan Spam Hop (s):",     "spamHopDelay")
 
-local saveCfgBtn  = makeCfgBtn("  💾  Lưu Config", C.green)
-local backCfgBtn  = makeCfgBtn("  ←  Quay lại",    C.btnDark)
-local resetCfgBtn = makeCfgBtn("  🔄  Khôi phục Mặc định", C.red)
+local saveCfgBtn  = makeCfgBtn("  Luu Config",          C.green)
+local backCfgBtn  = makeCfgBtn("  Quay lai",            C.btnDark)
+local resetCfgBtn = makeCfgBtn("  Khoi phuc Mac dinh",  C.red)
 
 local function openConfig()
     for _, entry in ipairs(cfgBoxes) do
         entry.box.Text = tostring(config[entry.key])
     end
-    cfgPanel.Visible = true
+    cfgPanel.Visible    = true
     scrollFrame.Visible = false
-    configOpen = true
+    configOpen          = true
 end
 
 local function closeConfig()
-    cfgPanel.Visible = false
+    cfgPanel.Visible    = false
     scrollFrame.Visible = true
-    configOpen = false
+    configOpen          = false
 end
 
 openCfgBtn.MouseButton1Click:Connect(openConfig)
@@ -424,12 +439,12 @@ saveCfgBtn.MouseButton1Click:Connect(function()
             config[entry.key] = n
             dirty = true
         else
-            entry.box.Text = tostring(config[entry.key]) 
+            entry.box.Text = tostring(config[entry.key])
         end
     end
     if dirty then
         saveConfig()
-        sendNotify("Config đã được lưu thành công!")
+        sendNotify("Config da duoc luu thanh cong!")
     end
 end)
 
@@ -439,7 +454,7 @@ resetCfgBtn.MouseButton1Click:Connect(function()
         entry.box.Text = tostring(config[entry.key])
     end
     saveConfig()
-    sendNotify("Đã reset Config về mặc định!")
+    sendNotify("Da reset Config ve mac dinh!")
 end)
 
 -- ============================================================
@@ -448,7 +463,7 @@ end)
 local dragging, dragStart, startPos = false, nil, nil
 titleBar.InputBegan:Connect(function(inp)
     if inp.UserInputType == Enum.UserInputType.MouseButton1
-    or inp.UserInputType == Enum.UserInputType.Touch then
+        or inp.UserInputType == Enum.UserInputType.Touch then
         dragging  = true
         dragStart = inp.Position
         startPos  = menuFrame.Position
@@ -456,7 +471,7 @@ titleBar.InputBegan:Connect(function(inp)
 end)
 UserInputService.InputChanged:Connect(function(inp)
     if dragging and (inp.UserInputType == Enum.UserInputType.MouseMovement
-                  or inp.UserInputType == Enum.UserInputType.Touch) then
+            or inp.UserInputType == Enum.UserInputType.Touch) then
         local d = inp.Position - dragStart
         menuFrame.Position = UDim2.new(
             startPos.X.Scale, startPos.X.Offset + d.X,
@@ -465,13 +480,13 @@ UserInputService.InputChanged:Connect(function(inp)
 end)
 UserInputService.InputEnded:Connect(function(inp)
     if inp.UserInputType == Enum.UserInputType.MouseButton1
-    or inp.UserInputType == Enum.UserInputType.Touch then
+        or inp.UserInputType == Enum.UserInputType.Touch then
         dragging = false
     end
 end)
 
 -- ============================================================
--- MỞ / ĐÓNG MENU
+-- MO / DONG MENU
 -- ============================================================
 toggleBtn.MouseButton1Click:Connect(function()
     menuOpen = not menuOpen
@@ -485,109 +500,218 @@ end)
 local function sendNotify(msg, dur)
     pcall(function()
         StarterGui:SetCore("SendNotification", {
-            Title = "Server Tools",
-            Text  = msg,
+            Title    = "Server Tools",
+            Text     = msg,
             Duration = dur or 3,
         })
     end)
 end
 
 -- ============================================================
--- TELEPORT VỚI ĐẾM NGƯỢC + HỦY (ĐÃ SỬA LỖI TRẠNG THÁI)
+-- LAY DANH SACH SERVER HOP LE
+-- isLowPlayer = true  : 
+-- isLowPlayer = false : 
 -- ============================================================
-local function teleportWithCountdown(jobId, reason, triggerBtn, originalText, originalColor)
-    if isHopping then return end
-    isHopping    = true
-    cancelHopping = false
+local function fetchValidServers(isLowPlayer)
 
-    sendNotify(reason, config.teleportDelay + 1)
-
-    for i = config.teleportDelay, 1, -1 do
-        if cancelHopping then
-            isHopping = false
-            triggerBtn.Text = originalText
-            triggerBtn.BackgroundColor3 = originalColor
-            sendNotify("Đã hủy quá trình kết nối!")
-            return
-        end
-        triggerBtn.Text = "  ⏳  Hủy (" .. i .. "s)"
-        triggerBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
-        task.wait(1)
-    end
-
-    triggerBtn.Text = "  ⏳  Đang kết nối..."
-    local ok, err = teleportByJobId(jobId)
-    if not ok then
-        sendNotify("Lỗi kết nối: " .. tostring(err):sub(1,60))
-        isHopping = false
-        -- Phục hồi đúng trạng thái của nút khi thất bại
-        triggerBtn.Text = originalText
-        triggerBtn.BackgroundColor3 = originalColor
-    end
-end
-
--- ============================================================
--- ĐỔI SERVER NGẪU NHIÊN
--- ============================================================
-local function hopRandom(autoReason, triggerBtn, origText, origColor)
-    local reason = autoReason or ("Đổi server sau " .. config.teleportDelay .. "s!")
     local ok, result = pcall(function()
         local url = "https://games.roblox.com/v1/games/"
-                    .. game.PlaceId
-                    .. "/servers/Public?sortOrder=Asc&limit=100"
+            .. game.PlaceId
+            .. "/servers/Public?limit=100&"
+        if isLowPlayer then url = url .. "sortOrder=Asc"
+        end
+        print(url)
         return HttpService:JSONDecode(game:HttpGet(url))
     end)
-    if not ok or not result or not result.data then
-        sendNotify("Lỗi lấy danh sách server!")
-        return
-    end
+    if not ok or not result or not result.data then return nil end
+
     local valid = {}
     for _, s in ipairs(result.data) do
         if s.playing < s.maxPlayers and s.id ~= game.JobId then
-            table.insert(valid, s.id)
+            table.insert(valid, s)
         end
     end
-    if #valid == 0 then
-        sendNotify("Không tìm được server trống!")
-        return
-    end
-    local chosen = valid[math.random(1, #valid)]
-    teleportWithCountdown(chosen, reason, triggerBtn or hopBtn, origText or "  🔄  Đổi Server Ngẫu Nhiên", origColor or C.btnDark)
+    if #valid == 0 then return {} end
+
+    return valid
 end
 
 -- ============================================================
--- SỰ KIỆN NÚT
+-- SPAM HOP  (dung chung cho ca random lan low-player)
+--
+-- isLowPlayer = false : chon server ngau nhien
+-- isLowPlayer = true  : chon server it player nhat
+--
+-- Flow:
+--   1. Dem nguoc teleportDelay (co nut huy)
+--   2. Vong lap spamMaxHops lan:
+--        fetch -> chon server -> teleport -> dem nguoc spamHopDelay
 -- ============================================================
-hopBtn.MouseButton1Click:Connect(function()
-    if isHopping then 
+local function spamHop(triggerBtn, origText, origColor, isLowPlayer)
+    if isHopping then return end
+    isHopping     = true
+    cancelHopping = false
+
+    local maxHops = config.spamMaxHops
+    local label   = isLowPlayer and "Low-Player Hop" or "Spam Hop"
+
+    -- buoc 1: dem nguoc teleportDelay truoc khi bat dau
+    sendNotify(label .. " bat dau sau " .. config.teleportDelay .. "s!", config.teleportDelay + 1)
+
+    for i = config.teleportDelay, 1, -1 do
+        if cancelHopping then
+            isHopping                   = false
+            triggerBtn.Text             = origText
+            triggerBtn.BackgroundColor3 = origColor
+            sendNotify("Da huy " .. label .. "!")
+            return
+        end
+        triggerBtn.Text             = "  Huy (" .. i .. "s)"
+        triggerBtn.BackgroundColor3 = C.red
+        task.wait(1)
+    end
+
+    -- buoc 2: vong lap spam
+    local count = 0
+
+    task.spawn(function()
+        local count = 0
+        while isHopping and not cancelHopping and count < maxHops do
+
+            -- lay server
+            triggerBtn.Text             = "  " .. label .. " (" .. count .. "/" .. maxHops .. ") | Tim..."
+            triggerBtn.BackgroundColor3 = C.orange
+
+            local servers = fetchValidServers(isLowPlayer)
+
+            if count > 5 then cancelHopping = true end
+
+            if cancelHopping then break end
+
+            if not servers then
+                sendNotify("Loi lay server, thu lai...")
+                count = count + 1
+                task.wait(2)
+            elseif #servers == 0 then
+                count = count + 1
+                sendNotify("Khong tim duoc server trong, thu lai...")
+                task.wait(2)
+            else
+                -- low player -> lay phan tu dau (it player nhat)
+                -- random    -> chon ngau nhien
+                local chosen = servers[math.random(1, #servers)].id
+
+                local ok = pcall(teleportByJobId, chosen)
+                if ok then
+                    count = count + 1
+                    sendNotify(label .. " " .. count .. "/" .. maxHops .. " thanh cong!")
+                end
+
+                if cancelHopping or count >= maxHops then break end
+
+                -- dem nguoc spamHopDelay giua cac lan hop
+                for i = config.spamHopDelay, 1, -1 do
+                    if cancelHopping then break end
+                    triggerBtn.Text             = "  " .. label .. " (" .. count .. "/" .. maxHops .. ") | " .. i .. "s"
+                    triggerBtn.BackgroundColor3 = C.orange
+                    task.wait(1)
+                end
+            end
+        end
+
+        -- reset
+        isHopping     = false
+        cancelHopping = false
+
+        if count >= maxHops then
+            sendNotify(label .. " hoan tat! " .. count .. "/" .. maxHops .. " lan.")
+        else
+            sendNotify("Da dung " .. label .. "!")
+        end
+        triggerBtn.Text             = origText
+        triggerBtn.BackgroundColor3 = origColor
+    end)
+end
+
+-- ============================================================
+-- SU KIEN NUT
+-- ============================================================
+spamHopBtn.MouseButton1Click:Connect(function()
+    if isHopping then
         cancelHopping = true
-    else 
-        hopRandom(nil, hopBtn, "  🔄  Đổi Server Ngẫu Nhiên", C.btnDark) 
+    else
+        spamHop(spamHopBtn, SPAM_ORIG_TEXT, C.btnDark, false)
+    end
+end)
+
+spamLowBtn.MouseButton1Click:Connect(function()
+    if isHopping then
+        cancelHopping = true
+    else
+        spamHop(spamLowBtn, SPAM_LOW_ORIG_TEXT, C.purple, true)
     end
 end)
 
 joinJobBtn.MouseButton1Click:Connect(function()
     if isHopping then
         cancelHopping = true
-    else
-        local id = jobIdBox.Text:match("^%s*(.-)%s*$")
-        if #id < 10 then
-            sendNotify("Job ID quá ngắn hoặc không hợp lệ!")
+        return
+    end
+    local id = jobIdBox.Text:match("^%s*(.-)%s*$")
+    if #id < 10 then
+        sendNotify("Job ID qua ngan hoac khong hop le!")
+        return
+    end
+    isHopping     = true
+    cancelHopping = false
+
+    sendNotify("Join Job ID sau " .. config.teleportDelay .. "s!", config.teleportDelay + 1)
+    for i = config.teleportDelay, 1, -1 do
+        if cancelHopping then
+            isHopping                   = false
+            joinJobBtn.Text             = "  Join theo Job ID"
+            joinJobBtn.BackgroundColor3 = C.accent
+            sendNotify("Da huy Join Job ID!")
             return
         end
-        teleportWithCountdown(id, "Join Job ID sau " .. config.teleportDelay .. "s!", joinJobBtn, "  ▶  Join theo Job ID", C.accent)
+        joinJobBtn.Text             = "  Huy (" .. i .. "s)"
+        joinJobBtn.BackgroundColor3 = C.red
+        task.wait(1)
     end
+
+    joinJobBtn.Text             = "  Dang ket noi..."
+    joinJobBtn.BackgroundColor3 = C.orange
+
+    task.spawn(function()
+        local attempts = 0
+        while isHopping and not cancelHopping and attempts < 3 do
+            attempts = attempts + 1
+            local ok = pcall(teleportByJobId, id)
+            if ok then break end
+            warn("[ServerTools] Thu lai lan " .. attempts)
+            task.wait(3)
+        end
+        task.wait(2)
+        isHopping                   = false
+        joinJobBtn.Text             = "  Join theo Job ID"
+        joinJobBtn.BackgroundColor3 = C.accent
+    end)
+end)
+
+copyJobBtn.MouseButton1Click:Connect(function()
+    setclipboard(getJobId())
 end)
 
 autoHopBtn.MouseButton1Click:Connect(function()
     config.autoHopEnabled = not config.autoHopEnabled
     saveConfig()
     refreshAutoBtn()
-    sendNotify("Auto FPS Hop: " .. (config.autoHopEnabled and "BẬT" or "TẮT"))
+    sendNotify("Auto FPS Hop: " .. (config.autoHopEnabled and "BAT" or "TAT"))
 end)
 
 -- ============================================================
--- VÒNG LẶP FPS + AUTO HOP
+-- VONG LAP FPS + AUTO HOP
+-- Auto hop khong co dem nguoc, nhay thang khi FPS thap
 -- ============================================================
 RunService.RenderStepped:Connect(function()
     frameCount = frameCount + 1
@@ -604,18 +728,30 @@ task.spawn(function()
 
         if fps < config.fpsThreshold then
             fpsDisplay.TextColor3 = C.red
-            lowFpsTimer = lowFpsTimer + 1
-            local elapsed = os.clock() - scriptStartTime
+            lowFpsTimer           = lowFpsTimer + 1
+            local elapsed         = os.clock() - scriptStartTime
             if config.autoHopEnabled
-               and not isHopping
-               and lowFpsTimer >= config.fpsDuration
-               and elapsed >= config.gracePeriod then
+                and not isHopping
+                and lowFpsTimer >= config.fpsDuration
+                and elapsed >= config.gracePeriod then
                 lowFpsTimer = 0
-                hopRandom("FPS quá thấp! Tự động đổi server...", hopBtn, "  🔄  Đổi Server Ngẫu Nhiên", C.btnDark)
+                isHopping   = true
+                task.spawn(function()
+                    local servers = fetchValidServers(false)
+                    if servers and #servers > 0 then
+                        local chosen = servers[math.random(1, #servers)].id
+                        pcall(teleportByJobId, chosen)
+                        sendNotify("Auto Hop: Da doi server do FPS thap!")
+                    else
+                        sendNotify("Auto Hop: Khong tim duoc server trong!")
+                    end
+                    task.wait(2)
+                    isHopping = false
+                end)
             end
         else
             fpsDisplay.TextColor3 = C.green
-            lowFpsTimer = 0
+            lowFpsTimer           = 0
         end
     end
 end)
